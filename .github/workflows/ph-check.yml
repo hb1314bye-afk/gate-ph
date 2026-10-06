@@ -33,7 +33,7 @@ jobs:
       - name: Fetch and verify VPN Gate SSTP nodes
         run: python vpngate.py
         env:
-          CHECK_WORKER: ${{ secrets.CHECK_WORKER_URL }}
+          CHECK_WORKER: "https://gate-ph-check.hb1314bye.workers.dev/check?sstp=vpn:vpn@"
           CHECK_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
           CHECK_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
           COUNTRY_ALLOW: ""
