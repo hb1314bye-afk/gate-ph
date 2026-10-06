@@ -197,7 +197,7 @@ async function checkProxy({ type, value }, colo) {
 
 	try {
 		proxy = parseProxyAddress(value, type, DEFAULT_PORTS[type]);
-		if (type !== 'sstp' -or !proxy.hostname.toLowerCase().endsWith('.opengw.net')) {
+		if (type !== 'sstp' || !proxy.hostname.toLowerCase().endsWith('.opengw.net')) {
 			throw new Error('Only VPN Gate SSTP hosts are allowed');
 		}
 	} catch (error) {
