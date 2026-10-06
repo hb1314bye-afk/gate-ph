@@ -1,0 +1,55 @@
+name: Philippines VPN Gate Node Check
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "*/30 * * * *"
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: gate-ph-check
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Fetch Philippines nodes and build site
+        run: python vpngate.py
+        env:
+          CHECK_WORKER: ${{ secrets.CHECK_WORKER_URL }}
+          CHECK_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          CHECK_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+          COUNTRY_ALLOW: "PH"
+          EDGE_HOSTS: "edgetunnel.hb1314bye.workers.dev:443"
+          NODES_URL: "https://hb1314bye-afk.github.io/gate-ph/nodes.txt"
+          CHECK_CONCURRENCY: "4"
+          CHECK_TIMEOUT: "45"
+          MAX_CHECK_NODES: "20"
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: public
+
+      - name: Deploy to GitHub Pages
+        uses: actions/deploy-pages@v4
