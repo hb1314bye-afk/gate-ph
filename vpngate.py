@@ -40,7 +40,10 @@ VPNGATE_MIRROR = os.environ.get(
     "VPNGATE_MIRROR",
     "https://raw.githubusercontent.com/fdciabdul/Vpngate-Scraper-API/main/json/data.json",
 )
-WORKER_CHECK_URL = os.environ.get("CHECK_WORKER", "https://你的域名/check?sstp=vpn:vpn@")
+WORKER_CHECK_URL = os.environ.get("CHECK_WORKER", "")
+CHECK_ACCESS_CLIENT_ID = os.environ.get("CHECK_ACCESS_CLIENT_ID", "").strip()
+CHECK_ACCESS_CLIENT_SECRET = os.environ.get("CHECK_ACCESS_CLIENT_SECRET", "").strip()
+COUNTRY_ALLOW = {code.strip().upper() for code in os.environ.get("COUNTRY_ALLOW", "PH").split(",") if code.strip()}
 CONCURRENCY = max(1, int(os.environ.get("CHECK_CONCURRENCY", "32")))
 CHECK_TIMEOUT = float(os.environ.get("CHECK_TIMEOUT", "90"))
 MAX_CHECK_NODES = int(os.environ.get("MAX_CHECK_NODES", "0"))
@@ -236,7 +239,11 @@ def check_one(node, session):
     out["exit"] = None
     out["residential"] = "unknown"
     try:
-        r = session.get(url, timeout=CHECK_TIMEOUT, headers={"User-Agent": "Mozilla/5.0 (gate-checker)"})
+        check_headers = {"User-Agent": "Mozilla/5.0 (gate-checker)"}
+        if CHECK_ACCESS_CLIENT_ID and CHECK_ACCESS_CLIENT_SECRET:
+            check_headers["CF-Access-Client-Id"] = CHECK_ACCESS_CLIENT_ID
+            check_headers["CF-Access-Client-Secret"] = CHECK_ACCESS_CLIENT_SECRET
+        r = session.get(url, timeout=CHECK_TIMEOUT, headers=check_headers)
         if r.status_code != 200:
             out["error"] = f"HTTP {r.status_code}"
             out["worker_error"] = True
@@ -289,27 +296,21 @@ def build_outputs(results, raw_count, sstp_count, source):
         grp["nodes"].sort(key=lambda n: (n.get("latency_ms") is None, n.get("latency_ms") or 0, n["host"]))
         by_country[name] = grp
 
-    data = {"generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC"), "source": source, "worker": WORKER_CHECK_URL, "stats": stats, "countries": by_country, "available": available}
+    data = {"generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC"), "source": source, "worker": "private" if CHECK_ACCESS_CLIENT_ID else WORKER_CHECK_URL, "stats": stats, "countries": by_country, "available": available}
     return data
 
 # edgetunnel 入口地址池
-EDGE_HOSTS = [
-    h.strip()
-    for h in os.environ.get(
-        "EDGE_HOSTS",
-        "saas.072159.xyz:443,hzytjy.cn:443,ali.nonull.pp.ua:443,auto.dolby.dpdns.org:443,"
-        "cdn.cnno.de:443,saas.sin.fan:443,cf.777791.xyz:443",
-    ).split(",")
-    if h.strip()
-]
+EDGE_HOSTS = [h.strip() for h in os.environ.get("EDGE_HOSTS", "").split(",") if h.strip()]
 
-NODES_URL = os.environ.get("NODES_URL", "https://YOUR_GITHUB_USERNAME.github.io/gate/nodes.txt")
+NODES_URL = os.environ.get("NODES_URL", "https://hb1314bye-afk.github.io/gate-ph/nodes.txt")
 
 def build_nodes_text(data):
     """生成纯节点行版本 (无注释): 每行 = 入口地址#名字$sstp://..."""
     countries = data["countries"]
     _entry = os.environ.get("HOSTS_ENTRY", "").strip()
     edge = [e.strip() for e in _entry.split(",") if e.strip()] or EDGE_HOSTS
+    if not edge:
+        raise RuntimeError("必须设置 EDGE_HOSTS 或 HOSTS_ENTRY 为自有 edgetunnel 入口")
     lines = []
     idx = 0
     ordered = sorted(countries.items(), key=lambda kv: (-int(kv[1].get("count") or 0), str(kv[1].get("code") or kv[0])))
@@ -367,6 +368,10 @@ def main():
     if sstp_count == 0:
         die(f"从 {raw_count} 个原始节点中没有解析出任何 SSTP(TCP) 节点 — 数据格式可能已变化, 需要人工适配")
     uniq = dedupe(sstp_nodes)
+    if COUNTRY_ALLOW:
+        uniq = [n for n in uniq if (n.get("country_code") or "").upper() in COUNTRY_ALLOW]
+    if not uniq:
+        die("筛选后没有符合地区条件的 SSTP 节点；本次不发布其他地区结果")
 
     if MAX_CHECK_NODES > 0:
         uniq = uniq[:MAX_CHECK_NODES]
