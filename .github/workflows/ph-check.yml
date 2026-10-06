@@ -31,7 +31,22 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Fetch Philippines nodes and build site
-        run: python vpngate.py
+        shell: bash
+        run: |
+          set +e
+          output="$(python vpngate.py 2>&1)"
+          status=$?
+          printf '%s\n' "$output"
+          if [ "$status" -eq 0 ]; then
+            exit 0
+          fi
+          if printf '%s' "$output" | grep -Fq '筛选后没有符合地区条件的 SSTP 节点'; then
+            mkdir -p public
+            printf '# No verified Philippines VPN Gate SSTP node is currently available.\n' > public/nodes.txt
+            printf '<!doctype html><meta charset="utf-8"><title>Philippines nodes</title><p>No verified Philippines VPN Gate SSTP node is currently available.</p>\n' > public/index.html
+            exit 0
+          fi
+          exit "$status"
         env:
           CHECK_WORKER: ${{ secrets.CHECK_WORKER_URL }}
           CHECK_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
